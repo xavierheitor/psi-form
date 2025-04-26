@@ -276,16 +276,16 @@ export async function getAnswerOptions() {
     try {
         const answerOptions = await prisma.answerOption.findMany({
             where: {
-                deletedAt: null,
+                deletedAt: null
             },
             orderBy: {
-                createdAt: 'desc',
-            },
+                createdAt: 'desc'
+            }
         });
         console.log('[Server] getAnswerOptions - Opções encontradas:', answerOptions);
         return { success: true, answerOptions };
     } catch (error) {
-        console.error('[Server] getAnswerOptions - Erro ao buscar opções de resposta:', error);
+        console.error('[Server] getAnswerOptions - Erro ao buscar opções:', error);
         return { success: false, error: 'Erro ao buscar opções de resposta' };
     }
 }
@@ -515,9 +515,12 @@ export async function getForms() {
                 questions: {
                     include: {
                         question: {
-                            select: {
-                                id: true,
-                                text: true
+                            include: {
+                                answerOptions: {
+                                    where: {
+                                        deletedAt: null
+                                    }
+                                }
                             }
                         }
                     },
@@ -612,5 +615,67 @@ export async function removeQuestionFromForm(formId: string, questionId: string)
     } catch (error) {
         console.error('[Server] removeQuestionFromForm - Erro ao remover pergunta:', error);
         return { success: false, error: 'Erro ao remover pergunta do formulário' };
+    }
+}
+
+export async function addAnswerOptionToQuestion(questionId: string, answerOptionId: string) {
+    console.log('[Server] addAnswerOptionToQuestion - Iniciando vinculação de opção de resposta:', { questionId, answerOptionId });
+    try {
+        const question = await prisma.question.update({
+            where: { id: questionId },
+            data: {
+                answerOptions: {
+                    connect: {
+                        id: answerOptionId
+                    }
+                }
+            }
+        });
+        console.log('[Server] addAnswerOptionToQuestion - Opção vinculada com sucesso:', question);
+        revalidatePath('/admin/forms');
+        return { success: true, question };
+    } catch (error) {
+        console.error('[Server] addAnswerOptionToQuestion - Erro ao vincular opção:', error);
+        return { success: false, error: 'Erro ao vincular opção de resposta à pergunta' };
+    }
+}
+
+export async function getFormAnswers(formId: string) {
+    console.log('[Server] getFormAnswers - Iniciando busca de respostas:', { formId });
+    try {
+        const answers = await prisma.answer.findMany({
+            where: {
+                formId,
+                deletedAt: null
+            },
+            include: {
+                user: {
+                    select: {
+                        name: true,
+                        email: true
+                    }
+                },
+                question: {
+                    select: {
+                        text: true
+                    }
+                },
+                answerOption: {
+                    select: {
+                        label: true,
+                        value: true
+                    }
+                }
+            },
+            orderBy: {
+                createdAt: 'desc'
+            }
+        });
+
+        console.log('[Server] getFormAnswers - Respostas encontradas:', answers);
+        return { success: true, answers };
+    } catch (error) {
+        console.error('[Server] getFormAnswers - Erro ao buscar respostas:', error);
+        return { success: false, error: 'Erro ao buscar respostas' };
     }
 } 

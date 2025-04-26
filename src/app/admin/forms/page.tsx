@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Table, Card, Space, Button, Modal, Form, Input, Switch, message, Tag, Typography, Select } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined, OrderedListOutlined } from '@ant-design/icons';
+import { Table, Card, Space, Button, Modal, Form, Input, Switch, message, Tag, Typography, Select, Collapse } from 'antd';
+import { PlusOutlined, EditOutlined, DeleteOutlined, OrderedListOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import AdminAppLayout from '@/components/AdminAppLayout';
-import { createForm, getForms, updateForm, deleteForm, getAllQuestions, addQuestionToForm } from '@/lib/actions';
+import { createForm, getForms, updateForm, deleteForm, getAllQuestions, addQuestionToForm, addAnswerOptionToQuestion, getAnswerOptions } from '@/lib/actions';
 
 const { Title } = Typography;
 const { TextArea } = Input;
+const { Panel } = Collapse;
 
 interface Form {
     id: string;
@@ -16,13 +17,24 @@ interface Form {
     isActive: boolean;
     createdAt: Date;
     updatedAt: Date;
+    deletedAt: Date | null;
     questions: {
         id: string;
+        order: number;
+        createdAt: Date;
+        updatedAt: Date;
+        deletedAt: Date | null;
+        formId: string;
+        questionId: string;
         question: {
             id: string;
             text: string;
+            answerOptions: {
+                id: string;
+                value: string;
+                label: string;
+            }[];
         };
-        order: number;
     }[];
 }
 
@@ -36,15 +48,25 @@ interface Question {
     }[];
 }
 
+interface AnswerOption {
+    id: string;
+    label: string;
+    value: string;
+}
+
 export default function FormsPage() {
     const [forms, setForms] = useState<Form[]>([]);
     const [questions, setQuestions] = useState<Question[]>([]);
+    const [answerOptions, setAnswerOptions] = useState<AnswerOption[]>([]);
     const [isModalVisible, setIsModalVisible] = useState(false);
     const [isQuestionsModalVisible, setIsQuestionsModalVisible] = useState(false);
+    const [isAnswerOptionsModalVisible, setIsAnswerOptionsModalVisible] = useState(false);
     const [loading, setLoading] = useState(false);
     const [selectedForm, setSelectedForm] = useState<Form | null>(null);
+    const [selectedQuestion, setSelectedQuestion] = useState<Question | null>(null);
     const [form] = Form.useForm();
     const [questionForm] = Form.useForm();
+    const [answerOptionForm] = Form.useForm();
 
     useEffect(() => {
         loadData();
@@ -53,9 +75,10 @@ export default function FormsPage() {
     const loadData = async () => {
         setLoading(true);
         try {
-            const [formsResult, questionsResult] = await Promise.all([
+            const [formsResult, questionsResult, answerOptionsResult] = await Promise.all([
                 getForms(),
-                getAllQuestions()
+                getAllQuestions(),
+                getAnswerOptions()
             ]);
 
             if (formsResult.success && formsResult.forms) {
@@ -64,6 +87,10 @@ export default function FormsPage() {
 
             if (questionsResult.success && questionsResult.questions) {
                 setQuestions(questionsResult.questions);
+            }
+
+            if (answerOptionsResult.success && answerOptionsResult.answerOptions) {
+                setAnswerOptions(answerOptionsResult.answerOptions);
             }
         } catch (error) {
             console.error('Erro ao carregar dados:', error);
@@ -162,6 +189,33 @@ export default function FormsPage() {
         }
     };
 
+    const handleAddAnswerOption = async (values: { answerOptionId: string }) => {
+        if (!selectedForm) return;
+        setLoading(true);
+        try {
+            // Para cada pergunta do formulário, vincular a opção de resposta
+            const promises = selectedForm.questions.map(fq =>
+                addAnswerOptionToQuestion(fq.question.id, values.answerOptionId)
+            );
+
+            const results = await Promise.all(promises);
+            const hasError = results.some(result => !result.success);
+
+            if (!hasError) {
+                message.success('Opção de resposta adicionada com sucesso');
+                answerOptionForm.resetFields();
+                loadData();
+            } else {
+                message.error('Erro ao adicionar opção de resposta a algumas perguntas');
+            }
+        } catch (error) {
+            console.error('Erro ao adicionar opção de resposta:', error);
+            message.error('Erro ao adicionar opção de resposta');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const columns = [
         {
             title: 'Título',
@@ -192,6 +246,14 @@ export default function FormsPage() {
             ),
         },
         {
+            title: 'Opções de Resposta',
+            key: 'answerOptions',
+            render: (_: any, record: Form) => {
+                const totalOptions = record.questions.reduce((acc, q) => acc + (q.question.answerOptions?.length || 0), 0);
+                return <Tag>{totalOptions}</Tag>;
+            },
+        },
+        {
             title: 'Ações',
             key: 'actions',
             render: (_: any, record: Form) => (
@@ -205,6 +267,16 @@ export default function FormsPage() {
                         }}
                     >
                         Perguntas
+                    </Button>
+                    <Button
+                        type="link"
+                        icon={<CheckCircleOutlined />}
+                        onClick={() => {
+                            setSelectedForm(record);
+                            setIsAnswerOptionsModalVisible(true);
+                        }}
+                    >
+                        Respostas
                     </Button>
                     <Button
                         type="link"
@@ -316,7 +388,7 @@ export default function FormsPage() {
                     {selectedForm && (
                         <Space direction="vertical" size="large" style={{ width: '100%' }}>
                             <Card>
-                                <Title level={5}>Perguntas do Formulário</Title>
+                                <Title level={4}>Perguntas do Formulário</Title>
                                 <Table
                                     dataSource={selectedForm.questions}
                                     rowKey="id"
@@ -367,6 +439,69 @@ export default function FormsPage() {
 
                                     <Button type="primary" htmlType="submit" loading={loading}>
                                         Adicionar Pergunta
+                                    </Button>
+                                </Form>
+                            </Card>
+                        </Space>
+                    )}
+                </Modal>
+
+                <Modal
+                    title="Gerenciar Opções de Resposta"
+                    open={isAnswerOptionsModalVisible}
+                    onCancel={() => {
+                        setIsAnswerOptionsModalVisible(false);
+                        setSelectedForm(null);
+                    }}
+                    footer={null}
+                    width={800}
+                >
+                    {selectedForm && (
+                        <Space direction="vertical" size="large" style={{ width: '100%' }}>
+                            <Card>
+                                <Title level={4}>Opções de Resposta do Formulário</Title>
+                                <Table
+                                    dataSource={selectedForm.questions[0]?.question.answerOptions || []}
+                                    rowKey="id"
+                                    columns={[
+                                        {
+                                            title: 'Valor',
+                                            dataIndex: 'value',
+                                            key: 'value',
+                                        },
+                                        {
+                                            title: 'Rótulo',
+                                            dataIndex: 'label',
+                                            key: 'label',
+                                        },
+                                    ]}
+                                />
+                            </Card>
+
+                            <Card>
+                                <Title level={5}>Adicionar Opção de Resposta</Title>
+                                <Form
+                                    form={answerOptionForm}
+                                    layout="vertical"
+                                    onFinish={handleAddAnswerOption}
+                                >
+                                    <Form.Item
+                                        name="answerOptionId"
+                                        label="Opção de Resposta"
+                                        rules={[{ required: true, message: 'Por favor, selecione uma opção' }]}
+                                    >
+                                        <Select
+                                            showSearch
+                                            placeholder="Selecione uma opção de resposta"
+                                            options={answerOptions.map(ao => ({
+                                                value: ao.id,
+                                                label: ao.label
+                                            }))}
+                                        />
+                                    </Form.Item>
+
+                                    <Button type="primary" htmlType="submit" loading={loading}>
+                                        Adicionar Opção
                                     </Button>
                                 </Form>
                             </Card>

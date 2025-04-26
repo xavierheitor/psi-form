@@ -11,7 +11,6 @@ const { Title, Text } = Typography;
 interface Question {
     id: string;
     text: string;
-    type: string;
     answerOptions: {
         id: string;
         value: string;
@@ -113,17 +112,13 @@ export default function FormPage() {
                             label={question.text}
                             rules={[{ required: true, message: 'Por favor, responda esta pergunta' }]}
                         >
-                            {question.type === 'TEXT' ? (
-                                <Input.TextArea rows={4} />
-                            ) : (
-                                <Select
-                                    placeholder="Selecione uma opção"
-                                    options={question.answerOptions.map(option => ({
-                                        value: option.id,
-                                        label: option.label
-                                    }))}
-                                />
-                            )}
+                            <Select
+                                placeholder="Selecione uma opção"
+                                options={question.answerOptions.map(option => ({
+                                    value: option.id,
+                                    label: option.label
+                                }))}
+                            />
                         </Form.Item>
                     ))}
 

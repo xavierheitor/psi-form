@@ -14,6 +14,9 @@ interface Question {
     id: string;
     text: string;
     answerOptions: AnswerOption[];
+    form: {
+        title: string;
+    };
 }
 
 interface AnswerOption {
@@ -27,6 +30,7 @@ export default function FormResponsePage() {
     const [questions, setQuestions] = useState<Question[]>([]);
     const [user, setUser] = useState<{ name: string; email: string } | null>(null);
     const [loading, setLoading] = useState(false);
+    const [formTitle, setFormTitle] = useState('');
     const params = useParams();
     const formId = params.formId as string;
 
@@ -40,6 +44,7 @@ export default function FormResponsePage() {
 
                 if (questionsResult.success && questionsResult.questions) {
                     setQuestions(questionsResult.questions);
+                    setFormTitle(questionsResult.questions[0]?.form?.title || 'Formulário');
                 }
 
                 if (currentUser) {
@@ -63,7 +68,7 @@ export default function FormResponsePage() {
 
             const results = await Promise.all(
                 answers.map(({ questionId, answerOptionId }) =>
-                    submitAnswer(questionId, answerOptionId)
+                    submitAnswer(formId, questionId, answerOptionId)
                 )
             );
 
@@ -101,7 +106,7 @@ export default function FormResponsePage() {
                                     icon={<UserOutlined />}
                                 />
                                 <Space direction="vertical" size="small">
-                                    <Title level={4} style={{ margin: 0 }}>Questionário de Satisfação</Title>
+                                    <Title level={4} style={{ margin: 0 }}>{formTitle}</Title>
                                     <Text type="secondary">Respondido por: {user?.name || 'Usuário'}</Text>
                                     <Text type="secondary">{user?.email || ''}</Text>
                                 </Space>
