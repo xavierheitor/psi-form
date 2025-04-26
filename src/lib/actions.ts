@@ -4,7 +4,6 @@ import { PrismaClient } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 import { getCurrentUser } from './auth';
 
-// Inicializa o Prisma Client uma única vez
 const prisma = new PrismaClient();
 
 export async function createQuestion(text: string) {
@@ -174,7 +173,6 @@ interface RawQuestion {
 interface FormattedQuestion {
     id: string;
     text: string;
-    type: string;
     answerOptions: {
         id: string;
         value: string;
@@ -188,56 +186,87 @@ interface FormattedQuestion {
 export async function getQuestions(formId: string) {
     console.log('[Server] getQuestions - Iniciando busca de perguntas:', { formId });
     try {
-        const formQuestions = await prisma.$queryRaw<RawQuestion[]>`
-            SELECT 
-                q.id,
-                q.text,
-                q.type,
-                qo.id as "answerOptionId",
-                qo.value,
-                qo.label,
-                f.title as "formTitle"
-            FROM "FormQuestion" fq
-            JOIN "Question" q ON q.id = fq."questionId"
-            JOIN "Form" f ON f.id = fq."formId"
-            LEFT JOIN "AnswerOption" qo ON qo."questionId" = q.id
-            WHERE fq."formId" = ${formId}
-            AND fq."deletedAt" IS NULL
-            AND q."deletedAt" IS NULL
-            AND (qo."deletedAt" IS NULL OR qo."deletedAt" IS NULL)
-            ORDER BY fq.order ASC
-        `;
-
-        const formattedQuestions = formQuestions.reduce<FormattedQuestion[]>((acc, curr) => {
-            const existingQuestion = acc.find(q => q.id === curr.id);
-            if (existingQuestion) {
-                existingQuestion.answerOptions.push({
-                    id: curr.answerOptionId,
-                    value: curr.value,
-                    label: curr.label
-                });
-            } else {
-                acc.push({
-                    id: curr.id,
-                    text: curr.text,
-                    type: curr.type,
-                    answerOptions: [{
-                        id: curr.answerOptionId,
-                        value: curr.value,
-                        label: curr.label
-                    }],
-                    form: {
-                        title: curr.formTitle
-                    }
-                });
+        // Primeiro, vamos verificar se existem FormQuestions para este formId
+        const formQuestionsCount = await prisma.formQuestion.count({
+            where: {
+                formId,
+                deletedAt: null
             }
-            return acc;
-        }, []);
+        });
+        console.log('[Server] getQuestions - Total de FormQuestions encontradas:', formQuestionsCount);
 
-        console.log('[Server] getQuestions - Perguntas encontradas:', formattedQuestions);
+        const formQuestions = await prisma.formQuestion.findMany({
+            where: {
+                formId,
+                deletedAt: null
+            },
+            include: {
+                question: {
+                    include: {
+                        answerOptions: {
+                            where: {
+                                deletedAt: null
+                            }
+                        }
+                    }
+                },
+                form: {
+                    select: {
+                        title: true
+                    }
+                }
+            },
+            orderBy: {
+                order: 'asc'
+            }
+        });
+
+        console.log('[Server] getQuestions - Dados brutos retornados:', JSON.stringify(formQuestions, null, 2));
+
+        const formattedQuestions = formQuestions.map(fq => ({
+            id: fq.question.id,
+            text: fq.question.text,
+            answerOptions: fq.question.answerOptions.map(ao => ({
+                id: ao.id,
+                value: ao.value,
+                label: ao.label
+            })),
+            form: {
+                title: fq.form.title
+            }
+        }));
+
+        console.log('[Server] getQuestions - Perguntas formatadas:', JSON.stringify(formattedQuestions, null, 2));
         return { success: true, questions: formattedQuestions };
     } catch (error) {
         console.error('[Server] getQuestions - Erro ao buscar perguntas:', error);
+        return { success: false, error: 'Erro ao buscar perguntas' };
+    }
+}
+
+export async function getAllQuestions() {
+    console.log('[Server] getAllQuestions - Iniciando busca de todas as perguntas');
+    try {
+        const questions = await prisma.question.findMany({
+            where: {
+                deletedAt: null
+            },
+            include: {
+                answerOptions: {
+                    where: {
+                        deletedAt: null
+                    }
+                }
+            },
+            orderBy: {
+                createdAt: 'desc'
+            }
+        });
+
+        console.log('[Server] getAllQuestions - Perguntas encontradas:', JSON.stringify(questions, null, 2));
+        return { success: true, questions };
+    } catch (error) {
+        console.error('[Server] getAllQuestions - Erro ao buscar perguntas:', error);
         return { success: false, error: 'Erro ao buscar perguntas' };
     }
 }

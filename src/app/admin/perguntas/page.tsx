@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Table, Button, Modal, Form, Input, message, Space, Typography, Card, Row, Col } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import AdminAppLayout from '@/components/AdminAppLayout';
-import { createQuestion, createBatchQuestions, getQuestions, updateQuestion, deleteQuestion } from '@/lib/actions';
+import { createQuestion, createBatchQuestions, getAllQuestions, updateQuestion, deleteQuestion } from '@/lib/actions';
 
 const { Title } = Typography;
 
@@ -13,6 +13,15 @@ interface Question {
     text: string;
     createdAt: Date;
     updatedAt: Date;
+    deletedAt: Date | null;
+    answerOptions: {
+        id: string;
+        value: string;
+        label: string;
+        createdAt: Date;
+        updatedAt: Date;
+        deletedAt: Date | null;
+    }[];
 }
 
 export default function FormsPage() {
@@ -30,8 +39,8 @@ export default function FormsPage() {
 
     const loadData = async () => {
         try {
-            const result = await getQuestions();
-            if (result.success) {
+            const result = await getAllQuestions();
+            if (result.success && result.questions) {
                 setQuestions(result.questions);
             }
         } catch (error) {

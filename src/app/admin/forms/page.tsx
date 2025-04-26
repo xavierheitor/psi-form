@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Table, Card, Space, Button, Modal, Form, Input, Switch, message, Tag, Typography, Select } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, OrderedListOutlined } from '@ant-design/icons';
 import AdminAppLayout from '@/components/AdminAppLayout';
-import { createForm, getForms, updateForm, deleteForm, getQuestions } from '@/lib/actions';
+import { createForm, getForms, updateForm, deleteForm, getAllQuestions, addQuestionToForm } from '@/lib/actions';
 
 const { Title } = Typography;
 const { TextArea } = Input;
@@ -29,6 +29,11 @@ interface Form {
 interface Question {
     id: string;
     text: string;
+    answerOptions: {
+        id: string;
+        value: string;
+        label: string;
+    }[];
 }
 
 export default function FormsPage() {
@@ -39,6 +44,7 @@ export default function FormsPage() {
     const [loading, setLoading] = useState(false);
     const [selectedForm, setSelectedForm] = useState<Form | null>(null);
     const [form] = Form.useForm();
+    const [questionForm] = Form.useForm();
 
     useEffect(() => {
         loadData();
@@ -49,7 +55,7 @@ export default function FormsPage() {
         try {
             const [formsResult, questionsResult] = await Promise.all([
                 getForms(),
-                getQuestions()
+                getAllQuestions()
             ]);
 
             if (formsResult.success && formsResult.forms) {
@@ -131,6 +137,26 @@ export default function FormsPage() {
         } catch (error) {
             console.error('Erro ao excluir formulário:', error);
             message.error('Erro ao excluir formulário');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleAddQuestion = async (values: { questionId: string; order: string }) => {
+        if (!selectedForm) return;
+        setLoading(true);
+        try {
+            const result = await addQuestionToForm(selectedForm.id, values.questionId, parseInt(values.order, 10));
+            if (result.success) {
+                message.success('Pergunta adicionada com sucesso');
+                questionForm.resetFields();
+                loadData();
+            } else {
+                message.error(result.error || 'Erro ao adicionar pergunta');
+            }
+        } catch (error) {
+            console.error('Erro ao adicionar pergunta:', error);
+            message.error('Erro ao adicionar pergunta');
         } finally {
             setLoading(false);
         }
@@ -311,7 +337,11 @@ export default function FormsPage() {
 
                             <Card>
                                 <Title level={5}>Adicionar Pergunta</Title>
-                                <Form layout="vertical">
+                                <Form
+                                    form={questionForm}
+                                    layout="vertical"
+                                    onFinish={handleAddQuestion}
+                                >
                                     <Form.Item
                                         name="questionId"
                                         label="Pergunta"
@@ -335,7 +365,7 @@ export default function FormsPage() {
                                         <Input type="number" />
                                     </Form.Item>
 
-                                    <Button type="primary">
+                                    <Button type="primary" htmlType="submit" loading={loading}>
                                         Adicionar Pergunta
                                     </Button>
                                 </Form>

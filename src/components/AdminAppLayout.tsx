@@ -66,6 +66,11 @@ export default function AdminAppLayout({ children }: { children: React.ReactNode
             icon: <FormOutlined />,
         },
         {
+            key: "/admin/forms",
+            label: <Link href={{ pathname: "/admin/forms" }}>Formulários</Link>,
+            icon: <FormOutlined />,
+        },
+        {
             key: "/admin/repsostas",
             label: <Link href={{ pathname: "/admin/respostas" }}>Opçoes de Resposta</Link>,
             icon: <FormOutlined />,
