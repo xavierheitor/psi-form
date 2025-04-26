@@ -1,12 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Table, Card, Space, Button, Modal, Descriptions, Tag, Typography, Statistic, List, Select } from 'antd';
+import { Table, Card, Space, Button, Modal, Descriptions, Tag, Typography, Statistic, List, Select, DatePicker, Pagination } from 'antd';
 import { EyeOutlined } from '@ant-design/icons';
 import AdminAppLayout from '@/components/AdminAppLayout';
 import { getDashboardData, getForms } from '@/lib/actions';
+import dayjs from 'dayjs';
 
 const { Title } = Typography;
+const { RangePicker } = DatePicker;
 
 interface Answer {
     question: string;
@@ -19,13 +21,13 @@ interface Submission {
     email: string;
     date: string;
     time: string;
+    formTitle: string;
     answers: Answer[];
 }
 
 interface AnswerStat {
     optionId: string;
     label: string;
-    value: string;
     count: number;
 }
 
@@ -35,13 +37,29 @@ interface Form {
     description: string | null;
 }
 
+interface QuestionStat {
+    questionId: string;
+    questionText: string;
+    options: {
+        optionId: string;
+        label: string;
+        count: number;
+        percentage: string;
+    }[];
+}
+
 interface DashboardData {
     totalUsers: number;
     totalQuestions: number;
     totalAnswers: number;
     uniqueRespondents: number;
     recentSubmissions: Submission[];
-    answerStats: AnswerStat[];
+    questionStats: QuestionStat[];
+    pagination: {
+        current: number;
+        pageSize: number;
+        total: number;
+    };
 }
 
 export default function RelatoriosPage() {
@@ -51,6 +69,9 @@ export default function RelatoriosPage() {
     const [isModalVisible, setIsModalVisible] = useState(false);
     const [forms, setForms] = useState<Form[]>([]);
     const [selectedForm, setSelectedForm] = useState<string | null>(null);
+    const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs] | null>(null);
+    const [currentPage, setCurrentPage] = useState(1);
+    const pageSize = 10;
 
     useEffect(() => {
         loadForms();
@@ -58,9 +79,9 @@ export default function RelatoriosPage() {
 
     useEffect(() => {
         if (selectedForm) {
-            loadDashboardData(selectedForm);
+            loadDashboardData();
         }
-    }, [selectedForm]);
+    }, [selectedForm, currentPage, dateRange]);
 
     const loadForms = async () => {
         setLoading(true);
@@ -76,10 +97,13 @@ export default function RelatoriosPage() {
         }
     };
 
-    const loadDashboardData = async (formId: string) => {
+    const loadDashboardData = async () => {
         setLoading(true);
         try {
-            const result = await getDashboardData(formId);
+            const startDate = dateRange?.[0]?.toDate();
+            const endDate = dateRange?.[1]?.toDate();
+
+            const result = await getDashboardData(selectedForm || undefined, currentPage, pageSize, startDate, endDate);
             if (result.success && result.data) {
                 setDashboardData(result.data);
             }
@@ -100,6 +124,11 @@ export default function RelatoriosPage() {
             title: 'Email',
             dataIndex: 'email',
             key: 'email',
+        },
+        {
+            title: 'Formulário',
+            dataIndex: 'formTitle',
+            key: 'formTitle',
         },
         {
             title: 'Data',
@@ -136,15 +165,32 @@ export default function RelatoriosPage() {
             <Space direction="vertical" size="large" style={{ width: '100%' }}>
                 <Card>
                     <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-                        <Select
-                            style={{ width: 300 }}
-                            placeholder="Selecione um formulário"
-                            onChange={(value) => setSelectedForm(value)}
-                            options={forms.map(form => ({
-                                value: form.id,
-                                label: form.title
-                            }))}
-                        />
+                        <Space>
+                            <Select
+                                style={{ width: 300 }}
+                                placeholder="Selecione um formulário"
+                                onChange={(value) => setSelectedForm(value)}
+                                options={forms.map(form => ({
+                                    value: form.id,
+                                    label: form.title
+                                }))}
+                            />
+                            <RangePicker
+                                onChange={(dates) => setDateRange(dates as [dayjs.Dayjs, dayjs.Dayjs])}
+                                allowClear
+                                placeholder={['Data inicial', 'Data final']}
+                            />
+                            {dateRange && (
+                                <Button
+                                    onClick={() => {
+                                        setDateRange(null);
+                                        loadDashboardData();
+                                    }}
+                                >
+                                    Limpar Filtro
+                                </Button>
+                            )}
+                        </Space>
 
                         {selectedForm && (
                             <Space size="large">
@@ -173,44 +219,61 @@ export default function RelatoriosPage() {
                     <>
                         <Card>
                             <Title level={4}>Estatísticas de Respostas</Title>
-                            <Table
-                                dataSource={dashboardData.answerStats}
-                                rowKey="optionId"
-                                loading={loading}
-                                columns={[
-                                    {
-                                        title: 'Opção',
-                                        dataIndex: 'label',
-                                        key: 'label',
-                                    },
-                                    {
-                                        title: 'Valor',
-                                        dataIndex: 'value',
-                                        key: 'value',
-                                    },
-                                    {
-                                        title: 'Quantidade',
-                                        dataIndex: 'count',
-                                        key: 'count',
-                                    },
-                                ]}
-                            />
+                            {dashboardData.questionStats.map(question => (
+                                <div key={question.questionId} style={{ marginBottom: 24 }}>
+                                    <Title level={5}>{question.questionText}</Title>
+                                    <Table
+                                        dataSource={question.options}
+                                        rowKey="optionId"
+                                        pagination={false}
+                                        columns={[
+                                            {
+                                                title: 'Opção',
+                                                dataIndex: 'label',
+                                                key: 'label',
+                                            },
+                                            {
+                                                title: 'Quantidade',
+                                                dataIndex: 'count',
+                                                key: 'count',
+                                                align: 'right',
+                                            },
+                                            {
+                                                title: 'Percentual',
+                                                dataIndex: 'percentage',
+                                                key: 'percentage',
+                                                align: 'right',
+                                            },
+                                        ]}
+                                    />
+                                </div>
+                            ))}
                         </Card>
 
                         <Card>
-                            <Title level={4}>Últimos Respondentes</Title>
+                            <Title level={4}>Respostas</Title>
                             <Table
                                 columns={columns}
                                 dataSource={dashboardData.recentSubmissions}
                                 rowKey="id"
                                 loading={loading}
+                                pagination={false}
                             />
+                            <div style={{ marginTop: 16, textAlign: 'right' }}>
+                                <Pagination
+                                    current={currentPage}
+                                    pageSize={pageSize}
+                                    total={dashboardData.pagination.total}
+                                    onChange={(page) => setCurrentPage(page)}
+                                    showSizeChanger={false}
+                                />
+                            </div>
                         </Card>
                     </>
                 )}
 
                 <Modal
-                    title="Detalhes do Respondente"
+                    title={`Respostas do Formulário: ${selectedSubmission?.formTitle}`}
                     open={isModalVisible}
                     onCancel={() => {
                         setIsModalVisible(false);

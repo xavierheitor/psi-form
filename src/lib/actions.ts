@@ -290,9 +290,19 @@ export async function getAnswerOptions() {
     }
 }
 
-export async function getDashboardData(formId?: string) {
-    console.log('[Server] getDashboardData - Iniciando busca de dados do dashboard:', { formId });
+export async function getDashboardData(formId?: string, page: number = 1, pageSize: number = 10, startDate?: Date, endDate?: Date) {
+    console.log('[Server] getDashboardData - Iniciando busca de dados do dashboard:', { formId, page, pageSize, startDate, endDate });
     try {
+        const whereClause = {
+            ...(formId ? { formId } : {}),
+            ...(startDate && endDate ? {
+                createdAt: {
+                    gte: startDate,
+                    lte: endDate
+                }
+            } : {})
+        };
+
         const [
             totalUsers,
             totalQuestions,
@@ -309,20 +319,21 @@ export async function getDashboardData(formId?: string) {
             }),
             // Total de respostas
             prisma.answer.count({
-                where: formId ? { formId } : undefined
+                where: whereClause
             }),
             // Total de usuários únicos que responderam
             prisma.answer.groupBy({
                 by: ['userId'],
-                where: formId ? { formId } : undefined,
+                where: whereClause,
                 _count: {
                     userId: true
                 }
             }),
-            // Respostas recentes
+            // Respostas recentes com paginação
             prisma.answer.findMany({
-                take: 5,
-                where: formId ? { formId } : undefined,
+                skip: (page - 1) * pageSize,
+                take: pageSize,
+                where: whereClause,
                 orderBy: { createdAt: 'desc' },
                 include: {
                     user: {
@@ -340,19 +351,46 @@ export async function getDashboardData(formId?: string) {
                         select: {
                             text: true
                         }
+                    },
+                    form: {
+                        select: {
+                            title: true
+                        }
                     }
-                },
-                distinct: ['userId']
+                }
             }),
             // Estatísticas de respostas por opção
             prisma.answer.groupBy({
                 by: ['answerOptionId'],
-                where: formId ? { formId } : undefined,
+                where: whereClause,
                 _count: {
                     answerOptionId: true
                 }
             })
         ]);
+
+        // Agrupar respostas por usuário e formulário
+        const groupedAnswers = recentAnswers.reduce((acc, answer) => {
+            const key = `${answer.userId}-${answer.formId}`;
+            if (!acc[key]) {
+                acc[key] = {
+                    id: key,
+                    user: answer.user.name,
+                    email: answer.user.email,
+                    date: answer.createdAt.toISOString().split('T')[0],
+                    time: answer.createdAt.toISOString().split('T')[1].split('.')[0],
+                    formTitle: answer.form.title,
+                    answers: []
+                };
+            }
+            acc[key].answers.push({
+                question: answer.question.text,
+                answer: answer.answerOption.label
+            });
+            return acc;
+        }, {} as Record<string, any>);
+
+        const formattedSubmissions = Object.values(groupedAnswers);
 
         // Buscar detalhes das opções de resposta
         const answerOptions = await prisma.answerOption.findMany({
@@ -368,36 +406,64 @@ export async function getDashboardData(formId?: string) {
             }
         });
 
-        const formattedSubmissions = recentAnswers.map(answer => ({
-            id: `${answer.userId}-${answer.createdAt.toISOString()}`,
-            user: answer.user.name,
-            email: answer.user.email,
-            date: answer.createdAt.toISOString().split('T')[0],
-            time: answer.createdAt.toISOString().split('T')[1].split('.')[0],
-            answers: [{
-                question: answer.question.text,
-                answer: answer.answerOption.label
-            }]
-        }));
-
         const formattedAnswerStats = answerStats.map(stat => {
             const option = answerOptions.find(opt => opt.id === stat.answerOptionId);
+            const totalRespondents = uniqueRespondents.length;
+            const percentage = totalRespondents > 0 ? (stat._count.answerOptionId / totalRespondents) * 100 : 0;
+
             return {
                 optionId: stat.answerOptionId,
                 label: option?.label || 'Desconhecido',
-                value: option?.value || 'Desconhecido',
-                count: stat._count.answerOptionId
+                count: stat._count.answerOptionId,
+                percentage: percentage.toFixed(1) + '%'
             };
         });
 
-        console.log('[Server] getDashboardData - Dados encontrados:', {
-            totalUsers,
-            totalQuestions,
-            totalAnswers,
-            uniqueRespondents: uniqueRespondents.length,
-            recentSubmissionsCount: formattedSubmissions.length,
-            answerStatsCount: formattedAnswerStats.length
+        // Buscar as perguntas do formulário
+        const questions = await prisma.question.findMany({
+            where: {
+                FormQuestion: {
+                    some: {
+                        formId: formId,
+                        deletedAt: null
+                    }
+                },
+                deletedAt: null
+            },
+            include: {
+                answerOptions: {
+                    where: {
+                        deletedAt: null
+                    }
+                }
+            }
         });
+
+        // Agrupar respostas por pergunta e opção
+        const questionStats = questions.map(question => {
+            const questionAnswers = recentAnswers.filter(answer => answer.questionId === question.id);
+            const totalRespondents = questionAnswers.length;
+
+            const optionsStats = question.answerOptions.map(option => {
+                const count = questionAnswers.filter(answer => answer.answerOptionId === option.id).length;
+                const percentage = totalRespondents > 0 ? (count / totalRespondents) * 100 : 0;
+
+                return {
+                    optionId: option.id,
+                    label: option.label,
+                    count,
+                    percentage: percentage.toFixed(1) + '%'
+                };
+            });
+
+            return {
+                questionId: question.id,
+                questionText: question.text,
+                options: optionsStats
+            };
+        });
+
+        console.log('[Server] getDashboardData - Estatísticas por pergunta:', JSON.stringify(questionStats, null, 2));
 
         return {
             success: true,
@@ -407,7 +473,12 @@ export async function getDashboardData(formId?: string) {
                 totalAnswers,
                 uniqueRespondents: uniqueRespondents.length,
                 recentSubmissions: formattedSubmissions,
-                answerStats: formattedAnswerStats
+                questionStats,
+                pagination: {
+                    current: page,
+                    pageSize,
+                    total: totalAnswers
+                }
             }
         };
     } catch (error) {
