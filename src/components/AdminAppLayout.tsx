@@ -56,12 +56,12 @@ export default function AdminAppLayout({ children }: { children: React.ReactNode
             icon: <DashboardOutlined />,
         },
         {
-            key: "/admin/users",
-            label: <Link href={{ pathname: "/admin/users" }}>Usuários</Link>,
+            key: "/admin/usuarios",
+            label: <Link href={{ pathname: "/admin/usuarios" }}>Usuários</Link>,
             icon: <TeamOutlined />,
         },
         {
-            key: "/admin/forms",
+            key: "/admin/perguntas",
             label: <Link href={{ pathname: "/admin/perguntas" }}>Perguntas</Link>,
             icon: <FormOutlined />,
         },
@@ -71,8 +71,8 @@ export default function AdminAppLayout({ children }: { children: React.ReactNode
             icon: <FormOutlined />,
         },
         {
-            key: "/admin/reports",
-            label: <Link href={{ pathname: "/admin/reports" }}>Relatórios</Link>,
+            key: "/admin/relatorios",
+            label: <Link href={{ pathname: "/admin/relatorios" }}>Relatórios</Link>,
             icon: <BarChartOutlined />,
         },
     ];

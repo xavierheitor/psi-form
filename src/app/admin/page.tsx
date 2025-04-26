@@ -1,51 +1,38 @@
 'use client';
 
-import { Card, Row, Col, Statistic, Table, Tag, Typography } from 'antd';
+import { useEffect, useState } from 'react';
+import { Card, Row, Col, Statistic, Table, Tag, Typography, Spin, message } from 'antd';
 import { UserOutlined, FormOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import AdminAppLayout from '@/components/AdminAppLayout';
+import { getDashboardData } from '@/lib/actions';
 
 const { Title } = Typography;
 
-// Dados mockados
-const mockData = {
-    totalUsers: 150,
-    totalForms: 45,
-    completedForms: 32,
-    recentSubmissions: [
-        {
-            id: 1,
-            user: 'João Silva',
-            form: 'Questionário de Satisfação',
-            date: '2024-04-26',
-            status: 'Completo',
-        },
-        {
-            id: 2,
-            user: 'Maria Santos',
-            form: 'Avaliação de Desempenho',
-            date: '2024-04-25',
-            status: 'Pendente',
-        },
-        {
-            id: 3,
-            user: 'Pedro Oliveira',
-            form: 'Pesquisa de Clima',
-            date: '2024-04-24',
-            status: 'Completo',
-        },
-    ],
-};
+interface DashboardData {
+    totalUsers: number;
+    totalQuestions: number;
+    totalAnswers: number;
+    uniqueRespondents: number;
+    recentSubmissions: Array<{
+        id: string;
+        user: string;
+        email: string;
+        date: string;
+        time: string;
+    }>;
+}
 
 const columns = [
     {
         title: 'Usuário',
         dataIndex: 'user',
         key: 'user',
-    },
-    {
-        title: 'Formulário',
-        dataIndex: 'form',
-        key: 'form',
+        render: (text: string, record: any) => (
+            <div>
+                <div>{text}</div>
+                <div style={{ fontSize: '12px', color: '#666' }}>{record.email}</div>
+            </div>
+        ),
     },
     {
         title: 'Data',
@@ -53,18 +40,45 @@ const columns = [
         key: 'date',
     },
     {
-        title: 'Status',
-        dataIndex: 'status',
-        key: 'status',
-        render: (status: string) => (
-            <Tag color={status === 'Completo' ? 'green' : 'orange'}>
-                {status}
-            </Tag>
-        ),
+        title: 'Hora',
+        dataIndex: 'time',
+        key: 'time',
     },
 ];
 
 export default function AdminDashboard() {
+    const [loading, setLoading] = useState(true);
+    const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+
+    useEffect(() => {
+        const loadData = async () => {
+            try {
+                const result = await getDashboardData();
+                if (result.success && result.data) {
+                    setDashboardData(result.data);
+                } else {
+                    message.error('Erro ao carregar dados do dashboard');
+                }
+            } catch (error) {
+                message.error('Erro ao carregar dados do dashboard');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        loadData();
+    }, []);
+
+    if (loading) {
+        return (
+            <AdminAppLayout>
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+                    <Spin size="large" />
+                </div>
+            </AdminAppLayout>
+        );
+    }
+
     return (
         <AdminAppLayout>
             <Row gutter={[24, 24]} style={{ padding: '24px' }}>
@@ -72,38 +86,47 @@ export default function AdminDashboard() {
                     <Title level={2}>Dashboard Administrativo</Title>
                 </Col>
 
-                <Col span={8}>
+                <Col span={6}>
                     <Card>
                         <Statistic
                             title="Total de Usuários"
-                            value={mockData.totalUsers}
+                            value={dashboardData?.totalUsers || 0}
                             prefix={<UserOutlined />}
                         />
                     </Card>
                 </Col>
-                <Col span={8}>
+                <Col span={6}>
                     <Card>
                         <Statistic
-                            title="Total de Formulários"
-                            value={mockData.totalForms}
+                            title="Total de Perguntas"
+                            value={dashboardData?.totalQuestions || 0}
                             prefix={<FormOutlined />}
                         />
                     </Card>
                 </Col>
-                <Col span={8}>
+                <Col span={6}>
                     <Card>
                         <Statistic
-                            title="Formulários Completos"
-                            value={mockData.completedForms}
+                            title="Total de Respostas"
+                            value={dashboardData?.totalAnswers || 0}
                             prefix={<CheckCircleOutlined />}
+                        />
+                    </Card>
+                </Col>
+                <Col span={6}>
+                    <Card>
+                        <Statistic
+                            title="Usuários que Responderam"
+                            value={dashboardData?.uniqueRespondents || 0}
+                            prefix={<UserOutlined />}
                         />
                     </Card>
                 </Col>
 
                 <Col span={24}>
-                    <Card title="Submissões Recentes">
+                    <Card title="Respostas Recentes">
                         <Table
-                            dataSource={mockData.recentSubmissions}
+                            dataSource={dashboardData?.recentSubmissions || []}
                             columns={columns}
                             rowKey="id"
                         />
