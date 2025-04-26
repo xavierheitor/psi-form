@@ -35,7 +35,7 @@ export default function RespostasPage() {
         try {
             const result = await getAnswerOptions();
             console.log('[Client] RespostasPage - Dados carregados:', result);
-            if (result.success) {
+            if (result.success && result.answerOptions) {
                 setAnswerOptions(result.answerOptions);
             }
         } catch (error) {
