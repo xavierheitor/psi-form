@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Card, Space, Button, Form, Select, Typography, message } from 'antd';
 import { getForms } from '@/lib/actions';
 import { useRouter } from 'next/navigation';
+import AppLayout from '@/components/AppLayout';
 
 const { Title } = Typography;
 
@@ -43,40 +44,42 @@ export default function FormPage() {
     };
 
     return (
-        <Card>
-            <Space direction="vertical" size="large" style={{ width: '100%' }}>
-                <Title level={2}>Selecione um Formulário</Title>
+        <AppLayout>
+            <Card>
+                <Space direction="vertical" size="large" style={{ width: '100%' }}>
+                    <Title level={2}>Selecione um Formulário</Title>
 
-                <Form
-                    form={form}
-                    layout="vertical"
-                    onFinish={handleSubmit}
-                >
-                    <Form.Item
-                        name="formId"
-                        label="Formulário"
-                        rules={[{ required: true, message: 'Por favor, selecione um formulário' }]}
+                    <Form
+                        form={form}
+                        layout="vertical"
+                        onFinish={handleSubmit}
                     >
-                        <Select
-                            showSearch
-                            placeholder="Selecione um formulário"
-                            loading={loading}
-                            options={forms.map(form => ({
-                                value: form.id,
-                                label: form.title,
-                                description: form.description
-                            }))}
-                            optionFilterProp="label"
-                        />
-                    </Form.Item>
+                        <Form.Item
+                            name="formId"
+                            label="Formulário"
+                            rules={[{ required: true, message: 'Por favor, selecione um formulário' }]}
+                        >
+                            <Select
+                                showSearch
+                                placeholder="Selecione um formulário"
+                                loading={loading}
+                                options={forms.map(form => ({
+                                    value: form.id,
+                                    label: form.title,
+                                    description: form.description
+                                }))}
+                                optionFilterProp="label"
+                            />
+                        </Form.Item>
 
-                    <Form.Item>
-                        <Button type="primary" htmlType="submit">
-                            Responder Formulário
-                        </Button>
-                    </Form.Item>
-                </Form>
-            </Space>
-        </Card>
+                        <Form.Item>
+                            <Button type="primary" htmlType="submit">
+                                Responder Formulário
+                            </Button>
+                        </Form.Item>
+                    </Form>
+                </Space>
+            </Card>
+        </AppLayout>
     );
 } 
