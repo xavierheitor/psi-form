@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Table, Card, Space, Button, Modal, Descriptions, Tag, Typography, Statistic, List } from 'antd';
+import { Table, Card, Space, Button, Modal, Descriptions, Tag, Typography, Statistic, List, Select } from 'antd';
 import { EyeOutlined } from '@ant-design/icons';
 import AdminAppLayout from '@/components/AdminAppLayout';
-import { getDashboardData } from '@/lib/actions';
+import { getDashboardData, getForms } from '@/lib/actions';
 
 const { Title } = Typography;
 
@@ -29,6 +29,12 @@ interface AnswerStat {
     count: number;
 }
 
+interface Form {
+    id: string;
+    title: string;
+    description: string | null;
+}
+
 interface DashboardData {
     totalUsers: number;
     totalQuestions: number;
@@ -43,19 +49,39 @@ export default function RelatoriosPage() {
     const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
     const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
     const [isModalVisible, setIsModalVisible] = useState(false);
+    const [forms, setForms] = useState<Form[]>([]);
+    const [selectedForm, setSelectedForm] = useState<string | null>(null);
 
     useEffect(() => {
-        loadData();
+        loadForms();
     }, []);
 
-    const loadData = async () => {
+    useEffect(() => {
+        if (selectedForm) {
+            loadDashboardData(selectedForm);
+        }
+    }, [selectedForm]);
+
+    const loadForms = async () => {
         setLoading(true);
         try {
-            const result = await getDashboardData();
+            const result = await getForms();
+            if (result.success && result.forms) {
+                setForms(result.forms);
+            }
+        } catch (error) {
+            console.error('Erro ao carregar formulários:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const loadDashboardData = async (formId: string) => {
+        setLoading(true);
+        try {
+            const result = await getDashboardData(formId);
             if (result.success && result.data) {
                 setDashboardData(result.data);
-            } else {
-                console.error('Erro ao carregar dados:', result.error);
             }
         } catch (error) {
             console.error('Erro ao carregar dados:', error);
@@ -109,61 +135,79 @@ export default function RelatoriosPage() {
         <AdminAppLayout>
             <Space direction="vertical" size="large" style={{ width: '100%' }}>
                 <Card>
-                    <Space size="large">
-                        <Statistic
-                            title="Total de Usuários"
-                            value={dashboardData?.totalUsers || 0}
+                    <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+                        <Select
+                            style={{ width: 300 }}
+                            placeholder="Selecione um formulário"
+                            onChange={(value) => setSelectedForm(value)}
+                            options={forms.map(form => ({
+                                value: form.id,
+                                label: form.title
+                            }))}
                         />
-                        <Statistic
-                            title="Total de Perguntas"
-                            value={dashboardData?.totalQuestions || 0}
-                        />
-                        <Statistic
-                            title="Total de Respostas"
-                            value={dashboardData?.totalAnswers || 0}
-                        />
-                        <Statistic
-                            title="Respondentes Únicos"
-                            value={dashboardData?.uniqueRespondents || 0}
-                        />
+
+                        {selectedForm && (
+                            <Space size="large">
+                                <Statistic
+                                    title="Total de Usuários"
+                                    value={dashboardData?.totalUsers || 0}
+                                />
+                                <Statistic
+                                    title="Total de Perguntas"
+                                    value={dashboardData?.totalQuestions || 0}
+                                />
+                                <Statistic
+                                    title="Total de Respostas"
+                                    value={dashboardData?.totalAnswers || 0}
+                                />
+                                <Statistic
+                                    title="Respondentes Únicos"
+                                    value={dashboardData?.uniqueRespondents || 0}
+                                />
+                            </Space>
+                        )}
                     </Space>
                 </Card>
 
-                <Card>
-                    <Title level={4}>Estatísticas de Respostas</Title>
-                    <Table
-                        dataSource={dashboardData?.answerStats}
-                        rowKey="optionId"
-                        loading={loading}
-                        columns={[
-                            {
-                                title: 'Opção',
-                                dataIndex: 'label',
-                                key: 'label',
-                            },
-                            {
-                                title: 'Valor',
-                                dataIndex: 'value',
-                                key: 'value',
-                            },
-                            {
-                                title: 'Quantidade',
-                                dataIndex: 'count',
-                                key: 'count',
-                            },
-                        ]}
-                    />
-                </Card>
+                {selectedForm && dashboardData && (
+                    <>
+                        <Card>
+                            <Title level={4}>Estatísticas de Respostas</Title>
+                            <Table
+                                dataSource={dashboardData.answerStats}
+                                rowKey="optionId"
+                                loading={loading}
+                                columns={[
+                                    {
+                                        title: 'Opção',
+                                        dataIndex: 'label',
+                                        key: 'label',
+                                    },
+                                    {
+                                        title: 'Valor',
+                                        dataIndex: 'value',
+                                        key: 'value',
+                                    },
+                                    {
+                                        title: 'Quantidade',
+                                        dataIndex: 'count',
+                                        key: 'count',
+                                    },
+                                ]}
+                            />
+                        </Card>
 
-                <Card>
-                    <Title level={4}>Últimos Respondentes</Title>
-                    <Table
-                        columns={columns}
-                        dataSource={dashboardData?.recentSubmissions}
-                        rowKey="id"
-                        loading={loading}
-                    />
-                </Card>
+                        <Card>
+                            <Title level={4}>Últimos Respondentes</Title>
+                            <Table
+                                columns={columns}
+                                dataSource={dashboardData.recentSubmissions}
+                                rowKey="id"
+                                loading={loading}
+                            />
+                        </Card>
+                    </>
+                )}
 
                 <Modal
                     title="Detalhes do Respondente"

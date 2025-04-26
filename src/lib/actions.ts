@@ -122,72 +122,123 @@ export async function deleteAnswerOption(id: string) {
     }
 }
 
-export async function submitAnswer(questionId: string, answerOptionId: string) {
+export async function submitAnswer(formId: string, questionId: string, answerOptionId: string) {
+    console.log('[Server] submitAnswer - Iniciando envio de resposta:', { formId, questionId, answerOptionId });
     try {
         const user = await getCurrentUser();
         if (!user) {
-            return { error: 'Usuário não autenticado' };
+            return { success: false, error: 'Usuário não autenticado' };
+        }
+
+        const formQuestion = await prisma.formQuestion.findFirst({
+            where: {
+                formId,
+                questionId,
+                deletedAt: null
+            }
+        });
+
+        if (!formQuestion) {
+            return { success: false, error: 'Pergunta não encontrada no formulário' };
         }
 
         const answer = await prisma.answer.create({
             data: {
+                userId: user.id,
+                formId,
                 questionId,
                 answerOptionId,
-                userId: user.id,
-            },
+                formQuestionId: formQuestion.id
+            }
         });
-        revalidatePath('/form');
+
+        console.log('[Server] submitAnswer - Resposta enviada com sucesso:', answer);
+        revalidatePath('/forms');
         return { success: true, answer };
     } catch (error) {
         console.error('[Server] submitAnswer - Erro ao enviar resposta:', error);
-        return { error: 'Erro ao enviar resposta' };
+        return { success: false, error: 'Erro ao enviar resposta' };
     }
 }
 
-export async function getQuestions() {
-    console.log('[Server] getQuestions - Iniciando busca de perguntas e opções de resposta');
+interface RawQuestion {
+    id: string;
+    text: string;
+    type: string;
+    answerOptionId: string;
+    value: string;
+    label: string;
+    formTitle: string;
+}
+
+interface FormattedQuestion {
+    id: string;
+    text: string;
+    type: string;
+    answerOptions: {
+        id: string;
+        value: string;
+        label: string;
+    }[];
+    form: {
+        title: string;
+    };
+}
+
+export async function getQuestions(formId: string) {
+    console.log('[Server] getQuestions - Iniciando busca de perguntas:', { formId });
     try {
-        // Busca todas as opções de resposta disponíveis
-        const answerOptionsResult = await prisma.answerOption.findMany({
-            where: {
-                deletedAt: null
-            },
-            select: {
-                id: true,
-                value: true,
-                label: true
-            },
-            orderBy: {
-                createdAt: 'desc'
+        const formQuestions = await prisma.$queryRaw<RawQuestion[]>`
+            SELECT 
+                q.id,
+                q.text,
+                q.type,
+                qo.id as "answerOptionId",
+                qo.value,
+                qo.label,
+                f.title as "formTitle"
+            FROM "FormQuestion" fq
+            JOIN "Question" q ON q.id = fq."questionId"
+            JOIN "Form" f ON f.id = fq."formId"
+            LEFT JOIN "AnswerOption" qo ON qo."questionId" = q.id
+            WHERE fq."formId" = ${formId}
+            AND fq."deletedAt" IS NULL
+            AND q."deletedAt" IS NULL
+            AND (qo."deletedAt" IS NULL OR qo."deletedAt" IS NULL)
+            ORDER BY fq.order ASC
+        `;
+
+        const formattedQuestions = formQuestions.reduce<FormattedQuestion[]>((acc, curr) => {
+            const existingQuestion = acc.find(q => q.id === curr.id);
+            if (existingQuestion) {
+                existingQuestion.answerOptions.push({
+                    id: curr.answerOptionId,
+                    value: curr.value,
+                    label: curr.label
+                });
+            } else {
+                acc.push({
+                    id: curr.id,
+                    text: curr.text,
+                    type: curr.type,
+                    answerOptions: [{
+                        id: curr.answerOptionId,
+                        value: curr.value,
+                        label: curr.label
+                    }],
+                    form: {
+                        title: curr.formTitle
+                    }
+                });
             }
-        });
+            return acc;
+        }, []);
 
-        // Busca todas as perguntas
-        const questions = await prisma.question.findMany({
-            where: {
-                deletedAt: null
-            },
-            orderBy: {
-                createdAt: 'desc'
-            }
-        });
-
-        // Combina as perguntas com todas as opções de resposta
-        const questionsWithOptions = questions.map(question => ({
-            ...question,
-            answerOptions: answerOptionsResult
-        }));
-
-        console.log('[Server] getQuestions - Dados encontrados:', {
-            questionsCount: questions.length,
-            answerOptionsCount: answerOptionsResult.length,
-            firstQuestion: questionsWithOptions[0]
-        });
-
-        return { success: true, questions: questionsWithOptions };
+        console.log('[Server] getQuestions - Perguntas encontradas:', formattedQuestions);
+        return { success: true, questions: formattedQuestions };
     } catch (error) {
-        console.error('[Server] getQuestions - Erro ao buscar dados:', error);
-        return { success: false, error: 'Erro ao buscar perguntas e opções de resposta' };
+        console.error('[Server] getQuestions - Erro ao buscar perguntas:', error);
+        return { success: false, error: 'Erro ao buscar perguntas' };
     }
 }
 
@@ -210,8 +261,8 @@ export async function getAnswerOptions() {
     }
 }
 
-export async function getDashboardData() {
-    console.log('[Server] getDashboardData - Iniciando busca de dados do dashboard');
+export async function getDashboardData(formId?: string) {
+    console.log('[Server] getDashboardData - Iniciando busca de dados do dashboard:', { formId });
     try {
         const [
             totalUsers,
@@ -228,10 +279,13 @@ export async function getDashboardData() {
                 where: { deletedAt: null }
             }),
             // Total de respostas
-            prisma.answer.count(),
+            prisma.answer.count({
+                where: formId ? { formId } : undefined
+            }),
             // Total de usuários únicos que responderam
             prisma.answer.groupBy({
                 by: ['userId'],
+                where: formId ? { formId } : undefined,
                 _count: {
                     userId: true
                 }
@@ -239,6 +293,7 @@ export async function getDashboardData() {
             // Respostas recentes
             prisma.answer.findMany({
                 take: 5,
+                where: formId ? { formId } : undefined,
                 orderBy: { createdAt: 'desc' },
                 include: {
                     user: {
@@ -263,6 +318,7 @@ export async function getDashboardData() {
             // Estatísticas de respostas por opção
             prisma.answer.groupBy({
                 by: ['answerOptionId'],
+                where: formId ? { formId } : undefined,
                 _count: {
                     answerOptionId: true
                 }
@@ -397,5 +453,135 @@ export async function deleteUser(id: string) {
     } catch (error) {
         console.error('[Server] deleteUser - Erro ao excluir usuário:', error);
         return { success: false, error: 'Erro ao excluir usuário' };
+    }
+}
+
+export async function createForm(title: string, description: string | null, isActive: boolean) {
+    console.log('[Server] createForm - Iniciando criação de formulário:', { title, description, isActive });
+    try {
+        const form = await prisma.form.create({
+            data: {
+                title,
+                description,
+                isActive
+            }
+        });
+        console.log('[Server] createForm - Formulário criado com sucesso:', form);
+        revalidatePath('/admin/forms');
+        return { success: true, form };
+    } catch (error) {
+        console.error('[Server] createForm - Erro ao criar formulário:', error);
+        return { success: false, error: 'Erro ao criar formulário' };
+    }
+}
+
+export async function getForms() {
+    console.log('[Server] getForms - Iniciando busca de formulários');
+    try {
+        const forms = await prisma.form.findMany({
+            where: {
+                deletedAt: null
+            },
+            include: {
+                questions: {
+                    include: {
+                        question: {
+                            select: {
+                                id: true,
+                                text: true
+                            }
+                        }
+                    },
+                    orderBy: {
+                        order: 'asc'
+                    }
+                }
+            },
+            orderBy: {
+                createdAt: 'desc'
+            }
+        });
+        console.log('[Server] getForms - Formulários encontrados:', forms);
+        return { success: true, forms };
+    } catch (error) {
+        console.error('[Server] getForms - Erro ao buscar formulários:', error);
+        return { success: false, error: 'Erro ao buscar formulários' };
+    }
+}
+
+export async function updateForm(id: string, title: string, description: string | null, isActive: boolean) {
+    console.log('[Server] updateForm - Iniciando atualização de formulário:', { id, title, description, isActive });
+    try {
+        const form = await prisma.form.update({
+            where: { id },
+            data: {
+                title,
+                description,
+                isActive
+            }
+        });
+        console.log('[Server] updateForm - Formulário atualizado com sucesso:', form);
+        revalidatePath('/admin/forms');
+        return { success: true, form };
+    } catch (error) {
+        console.error('[Server] updateForm - Erro ao atualizar formulário:', error);
+        return { success: false, error: 'Erro ao atualizar formulário' };
+    }
+}
+
+export async function deleteForm(id: string) {
+    console.log('[Server] deleteForm - Iniciando exclusão de formulário:', id);
+    try {
+        const form = await prisma.form.update({
+            where: { id },
+            data: {
+                deletedAt: new Date()
+            }
+        });
+        console.log('[Server] deleteForm - Formulário excluído com sucesso:', form);
+        revalidatePath('/admin/forms');
+        return { success: true, form };
+    } catch (error) {
+        console.error('[Server] deleteForm - Erro ao excluir formulário:', error);
+        return { success: false, error: 'Erro ao excluir formulário' };
+    }
+}
+
+export async function addQuestionToForm(formId: string, questionId: string, order: number) {
+    console.log('[Server] addQuestionToForm - Iniciando adição de pergunta ao formulário:', { formId, questionId, order });
+    try {
+        const formQuestion = await prisma.formQuestion.create({
+            data: {
+                formId,
+                questionId,
+                order
+            }
+        });
+        console.log('[Server] addQuestionToForm - Pergunta adicionada com sucesso:', formQuestion);
+        revalidatePath('/admin/forms');
+        return { success: true, formQuestion };
+    } catch (error) {
+        console.error('[Server] addQuestionToForm - Erro ao adicionar pergunta:', error);
+        return { success: false, error: 'Erro ao adicionar pergunta ao formulário' };
+    }
+}
+
+export async function removeQuestionFromForm(formId: string, questionId: string) {
+    console.log('[Server] removeQuestionFromForm - Iniciando remoção de pergunta do formulário:', { formId, questionId });
+    try {
+        const formQuestion = await prisma.formQuestion.delete({
+            where: {
+                formId_questionId: {
+                    formId,
+                    questionId
+                }
+            }
+        });
+        console.log('[Server] removeQuestionFromForm - Pergunta removida com sucesso:', formQuestion);
+        revalidatePath('/admin/forms');
+        return { success: true, formQuestion };
+    } catch (error) {
+        console.error('[Server] removeQuestionFromForm - Erro ao remover pergunta:', error);
+        return { success: false, error: 'Erro ao remover pergunta do formulário' };
     }
 } 

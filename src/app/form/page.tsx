@@ -1,146 +1,82 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Form, Radio, Button, Card, message, Typography, Avatar, Row, Col, Space, Flex } from 'antd';
-import { UserOutlined } from '@ant-design/icons';
-import AppLayout from '@/components/AppLayout';
-import { getQuestions, getAnswerOptions, submitAnswer } from '@/lib/actions';
-import { getCurrentUser } from '@/lib/auth';
+import { useState, useEffect } from 'react';
+import { Card, Space, Button, Form, Select, Typography, message } from 'antd';
+import { getForms } from '@/lib/actions';
+import { useRouter } from 'next/navigation';
 
-const { Title, Text } = Typography;
+const { Title } = Typography;
 
-interface Question {
+interface Form {
     id: string;
-    text: string;
-    answerOptions: AnswerOption[];
-}
-
-interface AnswerOption {
-    id: string;
-    value: string;
-    label: string;
+    title: string;
+    description: string | null;
 }
 
 export default function FormPage() {
-    const [form] = Form.useForm();
-    const [questions, setQuestions] = useState<Question[]>([]);
-    const [user, setUser] = useState<{ name: string; email: string } | null>(null);
+    const [forms, setForms] = useState<Form[]>([]);
     const [loading, setLoading] = useState(false);
+    const [form] = Form.useForm();
+    const router = useRouter();
 
     useEffect(() => {
-        const loadData = async () => {
-            try {
-                const [questionsResult, currentUser] = await Promise.all([
-                    getQuestions(),
-                    getCurrentUser()
-                ]);
-
-                if (questionsResult.success && questionsResult.questions) {
-                    setQuestions(questionsResult.questions);
-                }
-
-                if (currentUser) {
-                    setUser(currentUser);
-                }
-            } catch (error) {
-                message.error('Erro ao carregar dados');
-            }
-        };
-
-        loadData();
+        loadForms();
     }, []);
 
-    const onFinish = async (values: Record<string, string>) => {
+    const loadForms = async () => {
         setLoading(true);
         try {
-            const answers = Object.entries(values).map(([questionId, answerOptionId]) => ({
-                questionId,
-                answerOptionId,
-            }));
-
-            const results = await Promise.all(
-                answers.map(({ questionId, answerOptionId }) =>
-                    submitAnswer(questionId, answerOptionId)
-                )
-            );
-
-            const hasError = results.some(result => result.error);
-            if (hasError) {
-                message.error('Erro ao enviar algumas respostas');
-            } else {
-                message.success('Formulário enviado com sucesso!');
-                form.resetFields();
+            const result = await getForms();
+            if (result.success && result.forms) {
+                setForms(result.forms);
             }
         } catch (error) {
-            message.error('Erro ao enviar formulário');
+            console.error('Erro ao carregar formulários:', error);
+            message.error('Erro ao carregar formulários');
         } finally {
             setLoading(false);
         }
     };
 
+    const handleSubmit = (values: { formId: string }) => {
+        router.push(`/form/${values.formId}`);
+    };
+
     return (
-        <AppLayout>
-            <Row justify="center">
-                <Col xs={24} sm={20} md={16} lg={12}>
-                    <Card>
-                        <Space direction="vertical" size="large" style={{ width: '100%' }}>
-                            <Flex
-                                align="center"
-                                gap="middle"
-                                style={{
-                                    padding: '16px',
-                                    background: '#f0f2f5',
-                                    borderRadius: '8px'
-                                }}
-                            >
-                                <Avatar
-                                    size={64}
-                                    icon={<UserOutlined />}
-                                />
-                                <Space direction="vertical" size="small">
-                                    <Title level={4} style={{ margin: 0 }}>Questionário de Satisfação</Title>
-                                    <Text type="secondary">Respondido por: {user?.name || 'Usuário'}</Text>
-                                    <Text type="secondary">{user?.email || ''}</Text>
-                                </Space>
-                            </Flex>
+        <Card>
+            <Space direction="vertical" size="large" style={{ width: '100%' }}>
+                <Title level={2}>Selecione um Formulário</Title>
 
-                            <Form
-                                form={form}
-                                layout="vertical"
-                                onFinish={onFinish}
-                            >
-                                {questions.map((question) => (
-                                    <Form.Item
-                                        key={question.id}
-                                        name={question.id}
-                                        label={question.text}
-                                        rules={[{ required: true, message: 'Por favor, selecione uma opção!' }]}
-                                    >
-                                        <Radio.Group>
-                                            {question.answerOptions.map((option) => (
-                                                <Radio key={option.id} value={option.id}>
-                                                    {option.label}
-                                                </Radio>
-                                            ))}
-                                        </Radio.Group>
-                                    </Form.Item>
-                                ))}
+                <Form
+                    form={form}
+                    layout="vertical"
+                    onFinish={handleSubmit}
+                >
+                    <Form.Item
+                        name="formId"
+                        label="Formulário"
+                        rules={[{ required: true, message: 'Por favor, selecione um formulário' }]}
+                    >
+                        <Select
+                            showSearch
+                            placeholder="Selecione um formulário"
+                            loading={loading}
+                            options={forms.map(form => ({
+                                value: form.id,
+                                label: form.title,
+                                description: form.description
+                            }))}
+                            optionFilterProp="label"
+                        />
+                    </Form.Item>
 
-                                <Form.Item>
-                                    <Button
-                                        type="primary"
-                                        htmlType="submit"
-                                        style={{ width: '100%' }}
-                                        loading={loading}
-                                    >
-                                        Enviar Respostas
-                                    </Button>
-                                </Form.Item>
-                            </Form>
-                        </Space>
-                    </Card>
-                </Col>
-            </Row>
-        </AppLayout>
+                    <Form.Item>
+                        <Button type="primary" htmlType="submit">
+                            Responder Formulário
+                        </Button>
+                    </Form.Item>
+                </Form>
+            </Space>
+        </Card>
     );
 } 

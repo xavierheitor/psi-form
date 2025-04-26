@@ -1,147 +1,349 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Table, Button, Modal, Form, Input, message, Space, Typography, Card, Row, Col } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
+import { useState, useEffect } from 'react';
+import { Table, Card, Space, Button, Modal, Form, Input, Switch, message, Tag, Typography, Select } from 'antd';
+import { PlusOutlined, EditOutlined, DeleteOutlined, OrderedListOutlined } from '@ant-design/icons';
 import AdminAppLayout from '@/components/AdminAppLayout';
-import { createQuestion, createBatchQuestions, getQuestions, updateQuestion, deleteQuestion } from '@/lib/actions';
+import { createForm, getForms, updateForm, deleteForm, getQuestions } from '@/lib/actions';
 
 const { Title } = Typography;
+const { TextArea } = Input;
+
+interface Form {
+    id: string;
+    title: string;
+    description: string | null;
+    isActive: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+    questions: {
+        id: string;
+        question: {
+            id: string;
+            text: string;
+        };
+        order: number;
+    }[];
+}
 
 interface Question {
     id: string;
     text: string;
-    createdAt: Date;
-    updatedAt: Date;
 }
 
 export default function FormsPage() {
+    const [forms, setForms] = useState<Form[]>([]);
     const [questions, setQuestions] = useState<Question[]>([]);
     const [isModalVisible, setIsModalVisible] = useState(false);
-    const [isBatchModalVisible, setIsBatchModalVisible] = useState(false);
+    const [isQuestionsModalVisible, setIsQuestionsModalVisible] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [selectedRows, setSelectedRows] = useState<Question[]>([]);
+    const [selectedForm, setSelectedForm] = useState<Form | null>(null);
     const [form] = Form.useForm();
-    const [batchForm] = Form.useForm();
 
     useEffect(() => {
-        console.log('[Client] FormsPage - Componente montado');
         loadData();
     }, []);
 
     const loadData = async () => {
-        console.log('[Client] FormsPage - Carregando dados');
+        setLoading(true);
         try {
-            const result = await getQuestions();
-            console.log('[Client] FormsPage - Dados carregados:', result);
-            if (result.success) {
-                setQuestions(result.questions);
+            const [formsResult, questionsResult] = await Promise.all([
+                getForms(),
+                getQuestions()
+            ]);
+
+            if (formsResult.success && formsResult.forms) {
+                setForms(formsResult.forms);
+            }
+
+            if (questionsResult.success && questionsResult.questions) {
+                setQuestions(questionsResult.questions);
             }
         } catch (error) {
-            console.error('[Client] FormsPage - Erro ao carregar dados:', error);
-            message.error('Erro ao carregar perguntas');
+            console.error('Erro ao carregar dados:', error);
+            message.error('Erro ao carregar dados');
+        } finally {
+            setLoading(false);
         }
     };
 
-    const handleCreateQuestion = async (values: { text: string }) => {
-        console.log('[Client] FormsPage - Criando pergunta:', values);
+    const handleCreate = async (values: any) => {
         setLoading(true);
         try {
-            const result = await createQuestion(values.text);
-            console.log('[Client] FormsPage - Resultado da criação:', result);
+            const result = await createForm(
+                values.title,
+                values.description,
+                values.isActive
+            );
             if (result.success) {
-                message.success('Pergunta criada com sucesso!');
+                message.success('Formulário criado com sucesso');
                 setIsModalVisible(false);
                 form.resetFields();
                 loadData();
             } else {
-                message.error(result.error || 'Erro ao criar pergunta');
+                message.error(result.error || 'Erro ao criar formulário');
             }
         } catch (error) {
-            console.error('[Client] FormsPage - Erro ao criar pergunta:', error);
-            message.error('Erro ao criar pergunta');
+            console.error('Erro ao criar formulário:', error);
+            message.error('Erro ao criar formulário');
         } finally {
             setLoading(false);
         }
     };
 
-    const handleCreateBatchQuestions = async (values: { questions: string }) => {
-        console.log('[Client] FormsPage - Criando perguntas em lote:', values);
+    const handleUpdate = async (values: any) => {
+        if (!selectedForm) return;
         setLoading(true);
         try {
-            const questions = values.questions.split('\n').filter(q => q.trim());
-            console.log('[Client] FormsPage - Perguntas processadas:', questions);
-            const result = await createBatchQuestions(questions);
-            console.log('[Client] FormsPage - Resultado da criação em lote:', result);
+            const result = await updateForm(
+                selectedForm.id,
+                values.title,
+                values.description,
+                values.isActive
+            );
             if (result.success) {
-                message.success('Perguntas criadas com sucesso!');
-                setIsBatchModalVisible(false);
-                batchForm.resetFields();
+                message.success('Formulário atualizado com sucesso');
+                setIsModalVisible(false);
+                form.resetFields();
+                setSelectedForm(null);
                 loadData();
             } else {
-                message.error(result.error || 'Erro ao criar perguntas');
+                message.error(result.error || 'Erro ao atualizar formulário');
             }
         } catch (error) {
-            console.error('[Client] FormsPage - Erro ao criar perguntas em lote:', error);
-            message.error('Erro ao criar perguntas');
+            console.error('Erro ao atualizar formulário:', error);
+            message.error('Erro ao atualizar formulário');
         } finally {
             setLoading(false);
         }
     };
 
-    const handleUpdateQuestion = async (id: string, values: { text: string }) => {
-        console.log('[Client] FormsPage - Atualizando pergunta:', { id, values });
+    const handleDelete = async (id: string) => {
         setLoading(true);
         try {
-            const result = await updateQuestion(id, values.text);
-            console.log('[Client] FormsPage - Resultado da atualização:', result);
+            const result = await deleteForm(id);
             if (result.success) {
-                message.success('Pergunta atualizada com sucesso!');
+                message.success('Formulário excluído com sucesso');
                 loadData();
             } else {
-                message.error(result.error || 'Erro ao atualizar pergunta');
+                message.error(result.error || 'Erro ao excluir formulário');
             }
         } catch (error) {
-            console.error('[Client] FormsPage - Erro ao atualizar pergunta:', error);
-            message.error('Erro ao atualizar pergunta');
+            console.error('Erro ao excluir formulário:', error);
+            message.error('Erro ao excluir formulário');
         } finally {
             setLoading(false);
         }
     };
 
-    const handleDeleteQuestions = async () => {
-        console.log('[Client] FormsPage - Excluindo perguntas:', selectedRows);
-        if (selectedRows.length === 0) {
-            message.warning('Selecione pelo menos uma pergunta para excluir');
-            return;
-        }
+    const columns = [
+        {
+            title: 'Título',
+            dataIndex: 'title',
+            key: 'title',
+        },
+        {
+            title: 'Descrição',
+            dataIndex: 'description',
+            key: 'description',
+            render: (text: string | null) => text || '-',
+        },
+        {
+            title: 'Status',
+            dataIndex: 'isActive',
+            key: 'isActive',
+            render: (isActive: boolean) => (
+                <Tag color={isActive ? 'green' : 'red'}>
+                    {isActive ? 'Ativo' : 'Inativo'}
+                </Tag>
+            ),
+        },
+        {
+            title: 'Perguntas',
+            key: 'questions',
+            render: (_: any, record: Form) => (
+                <Tag>{record.questions.length}</Tag>
+            ),
+        },
+        {
+            title: 'Ações',
+            key: 'actions',
+            render: (_: any, record: Form) => (
+                <Space>
+                    <Button
+                        type="link"
+                        icon={<OrderedListOutlined />}
+                        onClick={() => {
+                            setSelectedForm(record);
+                            setIsQuestionsModalVisible(true);
+                        }}
+                    >
+                        Perguntas
+                    </Button>
+                    <Button
+                        type="link"
+                        icon={<EditOutlined />}
+                        onClick={() => {
+                            setSelectedForm(record);
+                            form.setFieldsValue({
+                                title: record.title,
+                                description: record.description,
+                                isActive: record.isActive,
+                            });
+                            setIsModalVisible(true);
+                        }}
+                    />
+                    <Button
+                        type="link"
+                        danger
+                        icon={<DeleteOutlined />}
+                        onClick={() => {
+                            Modal.confirm({
+                                title: 'Confirmar exclusão',
+                                content: 'Tem certeza que deseja excluir este formulário?',
+                                onOk: () => handleDelete(record.id),
+                            });
+                        }}
+                    />
+                </Space>
+            ),
+        },
+    ];
 
-        Modal.confirm({
-            title: 'Confirmar exclusão',
-            content: `Tem certeza que deseja excluir ${selectedRows.length} pergunta(s)?`,
-            onOk: async () => {
-                setLoading(true);
-                try {
-                    const results = await Promise.all(
-                        selectedRows.map(question => deleteQuestion(question.id))
-                    );
-                    console.log('[Client] FormsPage - Resultado da exclusão:', results);
-                    if (results.every(result => result.success)) {
-                        message.success('Perguntas excluídas com sucesso!');
-                        setSelectedRows([]);
-                        loadData();
-                    } else {
-                        message.error('Erro ao excluir algumas perguntas');
-                    }
-                } catch (error) {
-                    console.error('[Client] FormsPage - Erro ao excluir perguntas:', error);
-                    message.error('Erro ao excluir perguntas');
-                } finally {
-                    setLoading(false);
-                }
-            },
-        });
-    };
+    return (
+        <AdminAppLayout>
+            <Space direction="vertical" size="large" style={{ width: '100%' }}>
+                <Card>
+                    <Space style={{ marginBottom: 16 }}>
+                        <Button
+                            type="primary"
+                            icon={<PlusOutlined />}
+                            onClick={() => {
+                                setSelectedForm(null);
+                                form.resetFields();
+                                setIsModalVisible(true);
+                            }}
+                        >
+                            Novo Formulário
+                        </Button>
+                    </Space>
 
-    // ... resto do código permanece igual ...
+                    <Table
+                        columns={columns}
+                        dataSource={forms}
+                        rowKey="id"
+                        loading={loading}
+                    />
+                </Card>
+
+                <Modal
+                    title={selectedForm ? 'Editar Formulário' : 'Novo Formulário'}
+                    open={isModalVisible}
+                    onCancel={() => {
+                        setIsModalVisible(false);
+                        form.resetFields();
+                        setSelectedForm(null);
+                    }}
+                    onOk={() => form.submit()}
+                    confirmLoading={loading}
+                >
+                    <Form
+                        form={form}
+                        layout="vertical"
+                        onFinish={selectedForm ? handleUpdate : handleCreate}
+                    >
+                        <Form.Item
+                            name="title"
+                            label="Título"
+                            rules={[{ required: true, message: 'Por favor, insira o título' }]}
+                        >
+                            <Input />
+                        </Form.Item>
+
+                        <Form.Item
+                            name="description"
+                            label="Descrição"
+                        >
+                            <TextArea rows={4} />
+                        </Form.Item>
+
+                        <Form.Item
+                            name="isActive"
+                            label="Ativo"
+                            valuePropName="checked"
+                        >
+                            <Switch />
+                        </Form.Item>
+                    </Form>
+                </Modal>
+
+                <Modal
+                    title="Gerenciar Perguntas"
+                    open={isQuestionsModalVisible}
+                    onCancel={() => {
+                        setIsQuestionsModalVisible(false);
+                        setSelectedForm(null);
+                    }}
+                    footer={null}
+                    width={800}
+                >
+                    {selectedForm && (
+                        <Space direction="vertical" size="large" style={{ width: '100%' }}>
+                            <Card>
+                                <Title level={5}>Perguntas do Formulário</Title>
+                                <Table
+                                    dataSource={selectedForm.questions}
+                                    rowKey="id"
+                                    columns={[
+                                        {
+                                            title: 'Ordem',
+                                            dataIndex: 'order',
+                                            key: 'order',
+                                        },
+                                        {
+                                            title: 'Pergunta',
+                                            dataIndex: ['question', 'text'],
+                                            key: 'text',
+                                        },
+                                    ]}
+                                />
+                            </Card>
+
+                            <Card>
+                                <Title level={5}>Adicionar Pergunta</Title>
+                                <Form layout="vertical">
+                                    <Form.Item
+                                        name="questionId"
+                                        label="Pergunta"
+                                        rules={[{ required: true, message: 'Por favor, selecione uma pergunta' }]}
+                                    >
+                                        <Select
+                                            showSearch
+                                            placeholder="Selecione uma pergunta"
+                                            options={questions.map(q => ({
+                                                value: q.id,
+                                                label: q.text
+                                            }))}
+                                        />
+                                    </Form.Item>
+
+                                    <Form.Item
+                                        name="order"
+                                        label="Ordem"
+                                        rules={[{ required: true, message: 'Por favor, insira a ordem' }]}
+                                    >
+                                        <Input type="number" />
+                                    </Form.Item>
+
+                                    <Button type="primary">
+                                        Adicionar Pergunta
+                                    </Button>
+                                </Form>
+                            </Card>
+                        </Space>
+                    )}
+                </Modal>
+            </Space>
+        </AdminAppLayout>
+    );
 } 

@@ -29,6 +29,7 @@ model Question {
     deletedAt     DateTime?
     answerOptions AnswerOption[]
     answers       Answer[]
+    FormQuestion  FormQuestion[]
 }
 
 model AnswerOption {
@@ -42,14 +43,52 @@ model AnswerOption {
     deletedAt DateTime?
 }
 
+model Form {
+    id          String    @id @default(cuid())
+    title       String
+    description String?
+    isActive    Boolean   @default(true)
+    createdAt   DateTime  @default(now())
+    updatedAt   DateTime  @updatedAt
+    deletedAt   DateTime?
+
+    // Relações
+    questions FormQuestion[]
+    answers   Answer[]
+}
+
+model FormQuestion {
+    id         String    @id @default(cuid())
+    formId     String
+    questionId String
+    order      Int
+    createdAt  DateTime  @default(now())
+    updatedAt  DateTime  @updatedAt
+    deletedAt  DateTime?
+
+    // Relações
+    form     Form     @relation(fields: [formId], references: [id])
+    question Question @relation(fields: [questionId], references: [id])
+    answers  Answer[]
+
+    @@unique([formId, questionId])
+}
+
 model Answer {
-    id             String       @id @default(cuid())
-    question       Question     @relation(fields: [questionId], references: [id])
-    questionId     String
-    answerOption   AnswerOption @relation(fields: [answerOptionId], references: [id])
-    answerOptionId String
-    user           User         @relation(fields: [userId], references: [id])
+    id             String    @id @default(cuid())
     userId         String
-    createdAt      DateTime     @default(now())
-    updatedAt      DateTime     @updatedAt
+    formId         String
+    questionId     String
+    answerOptionId String
+    createdAt      DateTime  @default(now())
+    updatedAt      DateTime  @updatedAt
+    deletedAt      DateTime?
+
+    // Relações
+    user           User          @relation(fields: [userId], references: [id])
+    form           Form          @relation(fields: [formId], references: [id])
+    question       Question      @relation(fields: [questionId], references: [id])
+    answerOption   AnswerOption  @relation(fields: [answerOptionId], references: [id])
+    FormQuestion   FormQuestion? @relation(fields: [formQuestionId], references: [id])
+    formQuestionId String?
 }
