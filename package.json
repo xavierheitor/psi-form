@@ -14,6 +14,7 @@
     "@types/bcryptjs": "^3.0.0",
     "antd": "^5.24.8",
     "bcryptjs": "^3.0.2",
+    "critters": "^0.0.23",
     "next": "14.2.6",
     "react": "^18",
     "react-dom": "^18"
