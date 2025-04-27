@@ -3,7 +3,6 @@ const nextConfig = {
     experimental: {
         optimizeCss: true,
         typedRoutes: true,
-        serverActions: true,
     },
 };
 

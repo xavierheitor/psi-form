@@ -20,7 +20,7 @@ export default function LoginPage() {
         const user = await getCurrentUser();
 
         message.success('Login realizado com sucesso!');
-        router.push(user?.isAdmin ? '/admin' : '/form');
+        router.push(user?.isAdmin ? '/admin' : '/');
     };
 
     return (
