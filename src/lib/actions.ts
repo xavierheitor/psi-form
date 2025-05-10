@@ -3,6 +3,7 @@
 import { PrismaClient } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 import { getCurrentUser } from './auth';
+import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
@@ -503,15 +504,19 @@ export async function getUsers() {
 
 export async function createUser(name: string, email: string, password: string, isAdmin: boolean) {
     console.log('[Server] createUser - Iniciando criação de usuário:', { name, email, isAdmin });
+
     try {
+        const hashedPassword = await bcrypt.hash(password, 10);
+
         const user = await prisma.user.create({
             data: {
                 name,
                 email,
-                password, // Note: Em produção, a senha deve ser hashed
+                password: hashedPassword,
                 isAdmin
             }
         });
+
         console.log('[Server] createUser - Usuário criado com sucesso:', user);
         revalidatePath('/admin/usuarios');
         return { success: true, user };
